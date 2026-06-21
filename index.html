@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>The Invasion Tower Defense</title>
+  <style>
+    body {
+      background: #111;
+      color: #fff;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    #gameCanvas {
+      background: #222;
+      border: 2px solid #fff;
+      display: block;
+      margin: 10px auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Hedge Tower Defense Starter</h1>
+  <p>Click to place towers (only basic logic for now).</p>
+  <canvas id="gameCanvas" width="800" height="450"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // --- BASIC MAP / PATH ---
+    // Path is a list of waypoints enemies will follow
+    const path = [
+      { x: 50,  y: 400 },
+      { x: 200, y: 400 },
+      { x: 400, y: 300 },
+      { x: 600, y: 200 },
+      { x: 750, y: 100 }
+    ];
+
+    // --- GAME OBJECT ARRAYS ---
+    const enemies = [];
+    const towers  = [];
+    const bullets = [];
+
+    let lastSpawn = 0;
+    const spawnInterval = 1500; // ms
+
+    // --- ENEMY CLASS ---
+    class Enemy {
+      constructor() {
+        this.x = path[0].x;
+        this.y = path[0].y;
+        this.speed = 0.8;
+        this.hp = 3;
+        this.pathIndex = 0;
+        this.radius = 12;
+      }
+
+      update(dt) {
+        const target = path[this.pathIndex + 1];
+        if (!target) return; // reached end (you can later subtract lives)
+
+        const dx = target.x - this.x;
+        const dy = target.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 1) {
+          this.pathIndex++;
+          return;
+        }
+
+        this.x += (dx / dist) * this.speed * dt;
+        this.y += (dy / dist) * this.speed * dt;
+      }
+
+      draw() {
+        ctx.fillStyle = "red"; // later: Skibidi Toilet sprite
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // --- TOWER CLASS ---
+    class Tower {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.range = 120;
+        this.fireRate = 600; // ms
+        this.lastShot = 0;
+      }
+
+      update(dt, time) {
+        // find first enemy in range
+        let target = null;
+        for (const e of enemies) {
+          const dist = Math.hypot(e.x - this.x, e.y - this.y);
+          if (dist <= this.range) {
+            target = e;
+            break;
+          }
+        }
+
+        if (target && time - this.lastShot > this.fireRate) {
+          this.shoot(target);
+          this.lastShot = time;
+        }
+      }
+
+      shoot(target) {
+        bullets.push(new Bullet(this.x, this.y, target));
+      }
+
+      draw() {
+        ctx.fillStyle = "cyan"; // later: Cameraman / Titan sprite
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 15, 0, Math.PI * 2);
+        ctx.fill();
+
+        // range circle (for debugging)
+        ctx.strokeStyle = "rgba(0,255,255,0.2)";
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    // --- BULLET CLASS ---
+    class Bullet {
+      constructor(x, y, target) {
+        this.x = x;
+        this.y = y;
+        this.target = target;
+        this.speed = 2.5;
+        this.radius = 4;
+        this.damage = 1;
+        this.dead = false;
+      }
+
+      update(dt) {
+        if (!this.target || this.target.hp <= 0) {
+          this.dead = true;
+          return;
+        }
+
+        const dx = this.target.x - this.x;
+        const dy = this.target.y - this.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist < 5) {
+          this.target.hp -= this.damage;
+          this.dead = true;
+          return;
+        }
+
+        this.x += (dx / dist) * this.speed * dt;
+        this.y += (dy / dist) * this.speed * dt;
+      }
+
+      draw() {
+        ctx.fillStyle = "yellow";
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // --- INPUT: PLACE TOWERS ON CLICK ---
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      towers.push(new Tower(x, y));
+    });
+
+    // --- SPAWN ENEMIES ---
+    function spawnEnemy() {
+      enemies.push(new Enemy());
+    }
+
+    // --- GAME LOOP ---
+    let lastTime = performance.now();
+
+    function gameLoop(time) {
+      const dt = time - lastTime;
+      lastTime = time;
+
+      // spawn enemies over time
+      if (time - lastSpawn > spawnInterval) {
+        spawnEnemy();
+        lastSpawn = time;
+      }
+
+      update(dt, time);
+      draw();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt, time) {
+      // update enemies
+      for (const e of enemies) {
+        e.update(dt);
+      }
+      // remove dead enemies
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        if (enemies[i].hp <= 0) enemies.splice(i, 1);
+      }
+
+      // update towers
+      for (const t of towers) {
+        t.update(dt, time);
+      }
+
+      // update bullets
+      for (const b of bullets) {
+        b.update(dt);
+      }
+      // remove dead bullets
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        if (bullets[i].dead) bullets.splice(i, 1);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // draw path
+      ctx.strokeStyle = "#555";
+      ctx.lineWidth = 20;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(path[0].x, path[0].y);
+      for (let i = 1; i < path.length; i++) {
+        ctx.lineTo(path[i].x, path[i].y);
+      }
+      ctx.stroke();
+
+      // draw enemies
+      for (const e of enemies) {
+        e.draw();
+      }
+
+      // draw towers
+      for (const t of towers) {
+        t.draw();
+      }
+
+      // draw bullets
+      for (const b of bullets) {
+        b.draw();
+      }
+    }
+
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
