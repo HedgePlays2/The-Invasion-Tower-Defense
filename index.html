@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>The Invasion Tower Defense</title>
+  <script src="https://js.puter.com/v2/"></script>
   <style>
     body {
       background: #111;
@@ -15,12 +16,47 @@
       border: 2px solid #fff;
       display: block;
       margin: 10px auto;
+      max-width: calc(100vw - 24px);
+      height: auto;
     }
+    #accountPanel {
+      max-width: 760px;
+      margin: 14px auto;
+      padding: 14px;
+      border: 1px solid #444;
+      border-radius: 12px;
+      background: #1b1b1b;
+    }
+    #accountStatus { color: #aaa; margin: 8px 0 12px; }
+    .accountButton {
+      margin: 4px;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 7px;
+      background: #286b58;
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .accountButton.secondary { background: #444; }
+    .accountButton:disabled { opacity: .5; cursor: wait; }
+    #saveMessage { min-height: 1.2em; color: #9ad8bd; font-size: 13px; }
   </style>
 </head>
 <body>
   <h1>Hedge Tower Defense Starter</h1>
-  <p>Click to place towers (only basic logic for now).</p>
+  <p>Click the battlefield to place a tower. Your progress is saved locally automatically.</p>
+  <section id="accountPanel">
+    <h2>Player Account &amp; Saves</h2>
+    <div id="accountStatus">Playing as guest — no account needed.</div>
+    <button class="accountButton" id="signInButton">Sign in with Puter</button>
+    <button class="accountButton secondary" id="signOutButton" hidden>Sign out</button>
+    <div>
+      <button class="accountButton secondary" id="cloudSaveButton" disabled>Save to cloud</button>
+      <button class="accountButton secondary" id="cloudLoadButton" disabled>Load cloud save</button>
+    </div>
+    <div id="saveMessage" aria-live="polite"></div>
+  </section>
   <canvas id="gameCanvas" width="800" height="450"></canvas>
 
   <script>
@@ -41,6 +77,139 @@
     const enemies = [];
     const towers  = [];
     const bullets = [];
+
+    // --- LOCAL + OPTIONAL PUTER CLOUD SAVES ---
+    const LOCAL_SAVE_KEY = "invasion-tower-defense-save-v1";
+    const CLOUD_SAVE_FILE = "the-invasion-tower-defense-save.json";
+    const accountStatus = document.getElementById("accountStatus");
+    const saveMessage = document.getElementById("saveMessage");
+    const signInButton = document.getElementById("signInButton");
+    const signOutButton = document.getElementById("signOutButton");
+    const cloudSaveButton = document.getElementById("cloudSaveButton");
+    const cloudLoadButton = document.getElementById("cloudLoadButton");
+
+    function currentSaveData() {
+      return {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        towers: towers.map(tower => ({ x: tower.x, y: tower.y }))
+      };
+    }
+
+    function saveLocalGame() {
+      try {
+        localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(currentSaveData()));
+        saveMessage.textContent = "Progress saved on this device.";
+      } catch (error) {
+        saveMessage.textContent = "Couldn't save locally: " + error.message;
+      }
+    }
+
+    function loadLocalGame() {
+      try {
+        const raw = localStorage.getItem(LOCAL_SAVE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.version !== 1 || !Array.isArray(data.towers)) return;
+        data.towers.forEach(point => {
+          if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
+            towers.push(new Tower(point.x, point.y));
+          }
+        });
+        saveMessage.textContent = "Local progress loaded.";
+      } catch (error) {
+        saveMessage.textContent = "Couldn't load the local save.";
+      }
+    }
+
+    async function refreshPuterAccount() {
+      if (!window.puter || !puter.auth) {
+        accountStatus.textContent = "Puter couldn't load. Guest play and local saves still work.";
+        return;
+      }
+      try {
+        if (puter.auth.isSignedIn()) {
+          const user = await puter.auth.getUser();
+          accountStatus.textContent = "Signed in" + (user && user.username ? " as " + user.username : "") + ". Cloud saves are available.";
+          signInButton.hidden = true;
+          signOutButton.hidden = false;
+          cloudSaveButton.disabled = false;
+          cloudLoadButton.disabled = false;
+        } else {
+          accountStatus.textContent = "Playing as guest — sign in to enable cloud saves.";
+          signInButton.hidden = false;
+          signOutButton.hidden = true;
+          cloudSaveButton.disabled = true;
+          cloudLoadButton.disabled = true;
+        }
+      } catch (error) {
+        accountStatus.textContent = "Account status unavailable. Guest play still works.";
+      }
+    }
+
+    signInButton.addEventListener("click", async () => {
+      if (!window.puter || !puter.auth) {
+        accountStatus.textContent = "Puter is unavailable right now. You can keep playing as a guest.";
+        return;
+      }
+      signInButton.disabled = true;
+      try {
+        await puter.auth.signIn();
+        await refreshPuterAccount();
+        saveMessage.textContent = "You're signed in! Your local save is unchanged.";
+      } catch (error) {
+        saveMessage.textContent = "Sign-in was cancelled or unavailable. You can keep playing as a guest.";
+      } finally {
+        signInButton.disabled = false;
+      }
+    });
+
+    signOutButton.addEventListener("click", async () => {
+      try {
+        await puter.auth.signOut();
+        await refreshPuterAccount();
+        saveMessage.textContent = "Signed out. Local progress remains on this device.";
+      } catch (error) {
+        saveMessage.textContent = "Couldn't sign out: " + (error.message || "Please try again.");
+      }
+    });
+
+    cloudSaveButton.addEventListener("click", async () => {
+      if (!window.puter || !puter.auth || !puter.auth.isSignedIn()) return;
+      cloudSaveButton.disabled = true;
+      try {
+        await puter.fs.write(CLOUD_SAVE_FILE, JSON.stringify(currentSaveData()));
+        saveMessage.textContent = "Cloud save uploaded successfully.";
+      } catch (error) {
+        saveMessage.textContent = "Cloud save failed: " + (error.message || "Please try again.");
+      } finally {
+        cloudSaveButton.disabled = false;
+      }
+    });
+
+    cloudLoadButton.addEventListener("click", async () => {
+      if (!window.puter || !puter.auth || !puter.auth.isSignedIn()) return;
+      cloudLoadButton.disabled = true;
+      try {
+        const file = await puter.fs.read(CLOUD_SAVE_FILE);
+        const data = JSON.parse(await file.text());
+        if (data.version !== 1 || !Array.isArray(data.towers)) {
+          throw new Error("This cloud save has an unsupported format.");
+        }
+        towers.length = 0;
+        data.towers.forEach(point => {
+          if (Number.isFinite(point.x) && Number.isFinite(point.y)) {
+            towers.push(new Tower(point.x, point.y));
+          }
+        });
+        saveLocalGame();
+        saveMessage.textContent = "Cloud save loaded onto this device.";
+      } catch (error) {
+        saveMessage.textContent = "Couldn't load cloud save. You may not have uploaded one yet.";
+      } finally {
+        cloudLoadButton.disabled = false;
+      }
+    });
 
     let lastSpawn = 0;
     const spawnInterval = 1500; // ms
@@ -173,6 +342,7 @@
       const y = e.clientY - rect.top;
 
       towers.push(new Tower(x, y));
+      saveLocalGame();
     });
 
     // --- SPAWN ENEMIES ---
@@ -196,7 +366,9 @@
       update(dt, time);
       draw();
 
-      requestAnimationFrame(gameLoop);
+      loadLocalGame();
+    refreshPuterAccount();
+    requestAnimationFrame(gameLoop);
     }
 
     function update(dt, time) {
