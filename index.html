@@ -6,15 +6,31 @@
   <script src="https://js.puter.com/v2/"></script>
   <style>
     body {
-      background: #111;
-      color: #fff;
-      font-family: sans-serif;
+      margin: 0;
+      padding: 18px 12px 30px;
+      background: radial-gradient(circle at top, #26343a, #101719 65%);
+      color: #f1f5f3;
+      font-family: Arial, sans-serif;
       text-align: center;
+    }
+    h1 {
+      margin: 8px 0 4px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-shadow: 0 3px 18px #000;
+    }
+    .subtitle {
+      color: #9fb5ad;
+      font-size: 12px;
+      letter-spacing: 2px;
+      font-weight: bold;
     }
     #gameCanvas {
       background: #222;
-      border: 2px solid #fff;
+      border: 2px solid #82958e;
+      border-radius: 5px;
       display: block;
+      box-shadow: 0 12px 35px rgba(0,0,0,.45);
       margin: 10px auto;
       max-width: calc(100vw - 24px);
       height: auto;
@@ -44,8 +60,8 @@
   </style>
 </head>
 <body>
-  <h1>Hedge Tower Defense Starter</h1>
-  <p>Click the battlefield to place a tower. Your progress is saved locally automatically.</p>
+  <h1>The Invasion: Tower Defense</h1>
+  <p class="subtitle">EPISODE 1 — OLD CITY // Click the battlefield to place a tower</p>
   <section id="accountPanel">
     <h2>Player Account &amp; Saves</h2>
     <div id="accountStatus">Playing as guest — no account needed.</div>
@@ -365,10 +381,7 @@
 
       update(dt, time);
       draw();
-
-      loadLocalGame();
-    refreshPuterAccount();
-    requestAnimationFrame(gameLoop);
+      requestAnimationFrame(gameLoop);
     }
 
     function update(dt, time) {
@@ -396,36 +409,175 @@
       }
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // --- TOP-DOWN OLD CITY BLOCKOUT ---
+    // Original map artwork will replace this hand-built placeholder as we refine the layout.
+    const cityBuildings = [
+      {x:24,y:24,w:142,h:92,tone:0},
+      {x:184,y:22,w:108,h:116,tone:1},
+      {x:318,y:20,w:150,h:90,tone:2},
+      {x:500,y:18,w:112,h:112,tone:0},
+      {x:646,y:18,w:130,h:82,tone:1},
+      {x:18,y:170,w:112,h:116,tone:2},
+      {x:145,y:190,w:94,h:100,tone:0},
+      {x:282,y:170,w:102,h:84,tone:1},
+      {x:430,y:120,w:92,h:76,tone:2},
+      {x:585,y:118,w:112,h:72,tone:0},
+      {x:700,y:132,w:82,h:92,tone:1},
+      {x:28,y:316,w:112,h:92,tone:1},
+      {x:236,y:354,w:116,h:74,tone:2},
+      {x:410,y:348,w:120,h:82,tone:0},
+      {x:620,y:284,w:150,h:110,tone:2}
+    ];
+    const roofColors = ["#858b88", "#777f80", "#96958b"];
 
-      // draw path
-      ctx.strokeStyle = "#555";
-      ctx.lineWidth = 20;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(path[0].x, path[0].y);
-      for (let i = 1; i < path.length; i++) {
-        ctx.lineTo(path[i].x, path[i].y);
-      }
-      ctx.stroke();
+    function drawBuilding(b) {
+      const roof = roofColors[b.tone];
+      ctx.fillStyle = "rgba(0,0,0,.28)";
+      ctx.fillRect(b.x + 5, b.y + 7, b.w, b.h);
 
-      // draw enemies
-      for (const e of enemies) {
-        e.draw();
+      // building lot and narrow pavement apron
+      ctx.fillStyle = "#a5a69b";
+      ctx.fillRect(b.x - 5, b.y - 5, b.w + 10, b.h + 10);
+      ctx.fillStyle = "#555e5c";
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = roof;
+      ctx.fillRect(b.x + 4, b.y + 4, b.w - 8, b.h - 8);
+
+      // roof edge and subtle roof panel seams
+      ctx.strokeStyle = "rgba(30,38,38,.55)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(b.x + 7, b.y + 7, b.w - 14, b.h - 14);
+      ctx.lineWidth = 1;
+      for (let x = b.x + 18; x < b.x + b.w - 12; x += 25) {
+        ctx.beginPath();
+        ctx.moveTo(x, b.y + 9);
+        ctx.lineTo(x, b.y + b.h - 9);
+        ctx.stroke();
       }
 
-      // draw towers
-      for (const t of towers) {
-        t.draw();
-      }
+      // rooftop equipment
+      ctx.fillStyle = "#505a5b";
+      ctx.fillRect(b.x + b.w * .18, b.y + b.h * .2, Math.max(15, b.w * .22), 13);
+      ctx.fillStyle = "#b9b9ad";
+      ctx.fillRect(b.x + b.w * .62, b.y + b.h * .58, Math.max(13, b.w * .2), 11);
+      ctx.fillStyle = "#3e494a";
+      ctx.fillRect(b.x + b.w * .48, b.y + b.h * .16, 12, 20);
 
-      // draw bullets
-      for (const b of bullets) {
-        b.draw();
-      }
+      // rooftop access hatch
+      ctx.fillStyle = "#626a68";
+      ctx.fillRect(b.x + b.w * .42, b.y + b.h * .42, 20, 17);
+      ctx.strokeStyle = "rgba(230,230,210,.35)";
+      ctx.strokeRect(b.x + b.w * .42, b.y + b.h * .42, 20, 17);
     }
 
+    function drawTree(x, y, size) {
+      ctx.fillStyle = "rgba(0,0,0,.25)";
+      ctx.beginPath();
+      ctx.arc(x + 3, y + 4, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#344d3d";
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#587451";
+      ctx.beginPath();
+      ctx.arc(x - 2, y - 2, size * .68, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#82916a";
+      ctx.beginPath();
+      ctx.arc(x - 4, y - 5, size * .25, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawCityMap() {
+      // concrete city ground with subtle block texture
+      ctx.fillStyle = "#737c72";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let y = 0; y < canvas.height; y += 32) {
+        for (let x = 0; x < canvas.width; x += 32) {
+          ctx.fillStyle = ((x / 32 + y / 32) % 2 === 0) ? "rgba(220,220,190,.035)" : "rgba(20,30,28,.035)";
+          ctx.fillRect(x, y, 32, 32);
+        }
+      }
+
+      // lots and buildings
+      for (const b of cityBuildings) drawBuilding(b);
+
+      // road shoulders, sidewalks, curbs, then asphalt
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      function strokeRoute(color, width) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+        ctx.stroke();
+      }
+      strokeRoute("#aeb0a3", 116);
+      strokeRoute("#666e6b", 104);
+      strokeRoute("#30393b", 88);
+
+      // lane dashes following the invasion road
+      ctx.save();
+      ctx.setLineDash([18, 18]);
+      strokeRoute("rgba(218,211,177,.65)", 2);
+      ctx.restore();
+
+      // road edge markings
+      ctx.save();
+      ctx.setLineDash([7, 13]);
+      strokeRoute("rgba(190,198,184,.32)", 1);
+      ctx.restore();
+
+      // crosswalks at the main bends
+      const crossings = [{x:200,y:400,angle:-0.46},{x:400,y:300,angle:-0.46},{x:600,y:200,angle:-0.59}];
+      for (const cross of crossings) {
+        ctx.save();
+        ctx.translate(cross.x, cross.y);
+        ctx.rotate(cross.angle);
+        ctx.fillStyle = "rgba(225,225,210,.62)";
+        for (let i = -3; i <= 3; i++) ctx.fillRect(i * 9 - 2, -48, 4, 96);
+        ctx.restore();
+      }
+
+      // street trees and small planted areas
+      const trees = [
+        [166,155,10],[270,155,9],[395,150,10],[550,145,9],[720,260,10],
+        [160,320,9],[365,390,8],[555,300,9],[785,35,8],[18,120,8]
+      ];
+      for (const tree of trees) drawTree(...tree);
+
+      // small road drains and manhole covers
+      const details = [[88,382],[330,335],[520,240],[680,150],[730,118]];
+      for (const [x,y] of details) {
+        ctx.fillStyle = "#222b2d";
+        ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle = "#68716e";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.stroke();
+      }
+
+      // map label
+      ctx.fillStyle = "rgba(8,15,17,.72)";
+      ctx.fillRect(12, 12, 145, 24);
+      ctx.fillStyle = "#d6e1d9";
+      ctx.font = "bold 11px Arial";
+      ctx.textAlign = "left";
+      ctx.fillText("OLD CITY  /  EP. 01", 21, 28);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawCityMap();
+
+      for (const e of enemies) e.draw();
+      for (const t of towers) t.draw();
+      for (const b of bullets) b.draw();
+    }
+
+    loadLocalGame();
+    refreshPuterAccount();
     requestAnimationFrame(gameLoop);
   </script>
 </body>
