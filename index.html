@@ -351,12 +351,36 @@
       }
     }
 
-    // --- INPUT: PLACE TOWERS ON CLICK ---
+    // Distance from a point to the nearest point on the invasion route.
+    function distanceToRoute(x, y) {
+      let nearest = Infinity;
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i], b = path[i + 1];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const lengthSq = dx * dx + dy * dy;
+        const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / lengthSq));
+        const px = a.x + t * dx, py = a.y + t * dy;
+        nearest = Math.min(nearest, Math.hypot(x - px, y - py));
+      }
+      return nearest;
+    }
+
+    // --- INPUT: PLACE TOWERS ON CITY GROUND, NOT IN THE ROAD ---
     canvas.addEventListener("click", (e) => {
       const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
 
+      if (distanceToRoute(x, y) < 64) {
+        saveMessage.textContent = "Can't build in the road — choose a sidewalk or open lot.";
+        return;
+      }
+      if (towers.some(tower => Math.hypot(tower.x - x, tower.y - y) < 34)) {
+        saveMessage.textContent = "That's too close to another tower.";
+        return;
+      }
       towers.push(new Tower(x, y));
       saveLocalGame();
     });
@@ -489,6 +513,37 @@
       ctx.fill();
     }
 
+    function drawParkedCar(x, y, angle, color) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillStyle = "rgba(0,0,0,.28)";
+      ctx.fillRect(-13, -5, 30, 16);
+      ctx.fillStyle = "#252d30";
+      ctx.fillRect(-15, -8, 30, 16);
+      ctx.fillStyle = color;
+      ctx.fillRect(-13, -7, 26, 13);
+      ctx.fillStyle = "#a9c0bd";
+      ctx.fillRect(-7, -5, 12, 9);
+      ctx.fillStyle = "#d8d0a5";
+      ctx.fillRect(10, -5, 2, 3);
+      ctx.fillRect(10, 2, 2, 3);
+      ctx.fillStyle = "#b64f43";
+      ctx.fillRect(-12, -5, 2, 3);
+      ctx.fillRect(-12, 2, 2, 3);
+      ctx.restore();
+    }
+
+    function drawStreetLight(x, y) {
+      ctx.fillStyle = "rgba(0,0,0,.25)";
+      ctx.beginPath(); ctx.arc(x + 3, y + 4, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#303a3b";
+      ctx.fillRect(x - 2, y - 2, 4, 12);
+      ctx.fillRect(x - 2, y - 5, 10, 3);
+      ctx.fillStyle = "#d8d3a2";
+      ctx.fillRect(x + 5, y - 6, 5, 5);
+    }
+
     function drawCityMap() {
       // concrete city ground with subtle block texture
       ctx.fillStyle = "#737c72";
@@ -547,6 +602,28 @@
         [160,320,9],[365,390,8],[555,300,9],[785,35,8],[18,120,8]
       ];
       for (const tree of trees) drawTree(...tree);
+
+      // parked cars and street furniture make the blocks feel inhabited
+      drawParkedCar(250, 145, 0, "#536d78");
+      drawParkedCar(468, 82, 0, "#8a5145");
+      drawParkedCar(112, 300, Math.PI / 2, "#777d68");
+      drawParkedCar(744, 310, Math.PI / 2, "#596b59");
+      [[174,178],[300,145],[548,115],[710,242],[150,300],[570,330],[390,405]]
+        .forEach(point => drawStreetLight(point[0], point[1]));
+
+      // painted parking bays beside selected buildings
+      ctx.save();
+      ctx.strokeStyle = "rgba(224,222,194,.55)";
+      ctx.lineWidth = 2;
+      [[205,150,42],[420,80,38],[675,245,42]].forEach(([x,y,w]) => {
+        ctx.beginPath();
+        ctx.moveTo(x, y); ctx.lineTo(x + w, y);
+        ctx.moveTo(x, y + 20); ctx.lineTo(x + w, y + 20);
+        ctx.moveTo(x, y); ctx.lineTo(x, y + 20);
+        ctx.moveTo(x + w, y); ctx.lineTo(x + w, y + 20);
+        ctx.stroke();
+      });
+      ctx.restore();
 
       // small road drains and manhole covers
       const details = [[88,382],[330,335],[520,240],[680,150],[730,118]];
